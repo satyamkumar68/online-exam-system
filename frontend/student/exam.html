@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Take Exam - Online Examination System</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        #video-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            border: 3px solid var(--primary-color);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow-xl);
+            z-index: 1000;
+        }
+
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .timer {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: var(--danger-color);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: var(--radius-lg);
+            font-size: 1.5rem;
+            font-weight: 700;
+            box-shadow: var(--shadow-xl);
+            z-index: 999;
+        }
+
+        .question-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .question-nav-btn {
+            width: 40px;
+            height: 40px;
+            border: 2px solid var(--border-color);
+            background: white;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            transition: all var(--transition-fast);
+        }
+
+        .question-nav-btn.answered {
+            background: var(--success-color);
+            color: white;
+            border-color: var(--success-color);
+        }
+
+        .question-nav-btn.current {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .option-card {
+            padding: 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            margin-bottom: 0.75rem;
+        }
+
+        .option-card:hover {
+            border-color: var(--primary-color);
+            background: var(--light-bg);
+        }
+
+        .option-card.selected {
+            border-color: var(--primary-color);
+            background: var(--primary-light);
+            color: white;
+        }
+
+        .proctoring-alert {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--danger-color);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            z-index: 1001;
+            display: none;
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(-50%) translateY(0);
+            }
+
+            25% {
+                transform: translateX(-50%) translateY(-10px);
+            }
+
+            75% {
+                transform: translateX(-50%) translateY(10px);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Timer -->
+    <div class="timer" id="timer">00:00</div>
+
+    <!-- Proctoring Alert -->
+    <div class="proctoring-alert" id="proctoring-alert">⚠️ Warning: Suspicious activity detected!</div>
+
+    <!-- Webcam Feed -->
+    <div id="video-container">
+        <video id="webcam" autoplay muted></video>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container" style="margin-top: 2rem; margin-bottom: 2rem;">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title" id="exam-title">Loading Exam...</h2>
+                <p class="card-subtitle">Question <span id="current-question-num">1</span> of <span
+                        id="total-questions">0</span></p>
+            </div>
+
+            <div id="exam-container">
+                <div class="spinner"></div>
+            </div>
+
+            <!-- Question Navigation -->
+            <div class="card-header" style="margin-top: 2rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">Question Navigator</h3>
+                <div class="question-nav" id="question-nav"></div>
+            </div>
+
+            <!-- Navigation Buttons -->
+            <div class="d-flex justify-between" style="margin-top: 2rem;">
+                <button class="btn btn-outline" id="prev-btn" onclick="previousQuestion()">← Previous</button>
+                <button class="btn btn-danger" onclick="submitExam()">Submit Exam</button>
+                <button class="btn btn-primary" id="next-btn" onclick="nextQuestion()">Next →</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js?v=3"></script>
+    <script src="../js/auth.js"></script>
+    <script>
+        if (!checkAuth('STUDENT')) {
+            window.location.href = '../login.html';
+        }
+
+        let examData = null;
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let answers = {};
+        let attemptId = null;
+        let timeRemaining = 0;
+        let timerInterval = null;
+        let proctoringInterval = null;
+
+        // Get exam ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const examId = urlParams.get('examId');
+
+        if (!examId) {
+            window.location.href = 'dashboard.html';
+        }
+
+        // Initialize exam
+        async function initializeExam() {
+            try {
+                // Start exam attempt
+                const response = await apiRequest(`/student/exams/${examId}/start`, {
+                    method: 'POST'
+                });
+
+                if (response.success) {
+                    examData = response.data.exam;
+                    questions = response.data.questions;
+                    attemptId = response.data.attemptId;
+
+                    // Load any saved progress
+                    loadProgress();
+
+                    document.getElementById('exam-title').textContent = examData.examTitle;
+                    document.getElementById('total-questions').textContent = questions.length;
+
+                    timeRemaining = examData.durationMinutes * 60;
+                    startTimer();
+                    startProctoring();
+                    initializeWebcam();
+
+                    renderQuestion();
+                    renderQuestionNav();
+                } else {
+                    alert('Failed to start exam: ' + response.message);
+                    window.location.href = 'dashboard.html';
+                }
+            } catch (error) {
+                console.error('Error initializing exam:', error);
+                alert('Failed to start exam. Please try again.');
+                window.location.href = 'dashboard.html';
+            }
+        }
+
+        function renderQuestion() {
+            const question = questions[currentQuestionIndex];
+            document.getElementById('current-question-num').textContent = currentQuestionIndex + 1;
+
+            const container = document.getElementById('exam-container');
+            container.innerHTML = `
+                <div style="margin-bottom: 2rem;">
+                    <h3 style="color: var(--text-primary); margin-bottom: 1.5rem; line-height: 1.6;">
+                        ${currentQuestionIndex + 1}. ${question.questionText}
+                    </h3>
+                    <div id="options-container">
+                        ${question.options.map(option => `
+                            <div class="option-card ${answers[question.questionId] === option.optionLabel ? 'selected' : ''}" 
+                                 onclick="selectOption(${question.questionId}, '${option.optionLabel}')">
+                                <strong>${option.optionLabel}.</strong> ${option.optionText}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function selectOption(questionId, optionLabel) {
+            answers[questionId] = optionLabel;
+            saveProgress(); // Auto-save on selection
+            renderQuestion();
+            renderQuestionNav();
+        }
+
+        // Auto-save logic
+        function saveProgress() {
+            if (attemptId) {
+                const progressData = {
+                    answers: answers,
+                    timestamp: new Date().getTime()
+                };
+                localStorage.setItem(`exam_progress_${attemptId}`, JSON.stringify(progressData));
+            }
+        }
+
+        function loadProgress() {
+            if (attemptId) {
+                const savedData = localStorage.getItem(`exam_progress_${attemptId}`);
+                if (savedData) {
+                    try {
+                        const progress = JSON.parse(savedData);
+                        // Only restore if less than 24 hours old
+                        if (new Date().getTime() - progress.timestamp < 24 * 60 * 60 * 1000) {
+                            answers = progress.answers || {};
+                            console.log('Restored exam progress');
+                        }
+                    } catch (e) {
+                        console.error('Error loading progress:', e);
+                    }
+                }
+            }
+        }
+
+        function clearProgress() {
+            if (attemptId) {
+                localStorage.removeItem(`exam_progress_${attemptId}`);
+            }
+        }
+
+        function renderQuestionNav() {
+            const nav = document.getElementById('question-nav');
+            nav.innerHTML = questions.map((q, index) => `
+                <button class="question-nav-btn ${answers[q.questionId] ? 'answered' : ''} ${index === currentQuestionIndex ? 'current' : ''}"
+                        onclick="goToQuestion(${index})">
+                    ${index + 1}
+                </button>
+            `).join('');
+        }
+
+        function goToQuestion(index) {
+            currentQuestionIndex = index;
+            renderQuestion();
+            renderQuestionNav();
+        }
+
+        function previousQuestion() {
+            if (currentQuestionIndex > 0) {
+                currentQuestionIndex--;
+                renderQuestion();
+                renderQuestionNav();
+            }
+        }
+
+        function nextQuestion() {
+            if (currentQuestionIndex < questions.length - 1) {
+                currentQuestionIndex++;
+                renderQuestion();
+                renderQuestionNav();
+            }
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+
+                const minutes = Math.floor(timeRemaining / 60);
+                const seconds = timeRemaining % 60;
+                document.getElementById('timer').textContent =
+                    `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    autoSubmitExam();
+                }
+            }, 1000);
+        }
+
+        async function submitExam() {
+            if (!confirm('Are you sure you want to submit the exam? You cannot change your answers after submission.')) {
+                return;
+            }
+
+            clearInterval(timerInterval);
+            clearInterval(proctoringInterval);
+            stopWebcam(); // Stop webcam on submission
+
+            try {
+                // Convert answers object to array format expected by backend
+                const answersArray = Object.keys(answers).map(questionId => ({
+                    questionId: parseInt(questionId),
+                    selectedOption: answers[questionId]
+                }));
+
+                const response = await apiRequest(`/student/attempts/submit`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        attemptId: attemptId,
+                        answers: answersArray
+                    })
+                });
+
+                if (response.success) {
+                    clearProgress(); // Clear saved progress
+                    alert('Exam submitted successfully!');
+                    window.location.href = `results.html?attemptId=${attemptId}`;
+                } else {
+                    alert('Failed to submit exam: ' + response.message);
+                }
+            } catch (error) {
+                console.error('Error submitting exam:', error);
+                alert('Failed to submit exam. Please try again.');
+            }
+        }
+
+        async function autoSubmitExam() {
+            clearInterval(timerInterval);
+            clearInterval(proctoringInterval);
+            stopWebcam(); // Stop webcam on auto-submission
+
+            try {
+                // Convert answers object to array format expected by backend
+                const answersArray = Object.keys(answers).map(questionId => ({
+                    questionId: parseInt(questionId),
+                    selectedOption: answers[questionId]
+                }));
+
+                const response = await apiRequest(`/student/attempts/submit`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        attemptId: attemptId,
+                        answers: answersArray
+                    })
+                });
+
+                if (response.success) {
+                    clearProgress(); // Clear saved progress
+                    alert('Time is up! Your exam has been auto-submitted.');
+                    window.location.href = `results.html?attemptId=${attemptId}`;
+                } else {
+                    alert('Failed to auto-submit exam: ' + response.message);
+                }
+            } catch (error) {
+                console.error('Error auto-submitting exam:', error);
+                alert('Failed to auto-submit exam.');
+            }
+        }
+
+        // Webcam and Proctoring
+        async function initializeWebcam() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                document.getElementById('webcam').srcObject = stream;
+            } catch (error) {
+                console.error('Error accessing webcam:', error);
+                alert('Please enable webcam access for proctoring.');
+            }
+        }
+
+        function stopWebcam() {
+            const video = document.getElementById('webcam');
+            if (video && video.srcObject) {
+                const stream = video.srcObject;
+                const tracks = stream.getTracks();
+
+                tracks.forEach(track => {
+                    track.stop();
+                });
+
+                video.srcObject = null;
+            }
+        }
+
+        function startProctoring() {
+            proctoringInterval = setInterval(captureFrame, 5000); // Capture every 5 seconds
+        }
+
+        async function captureFrame() {
+            const video = document.getElementById('webcam');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            try {
+                const response = await fetch('http://localhost:5000/proctoring/capture', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Proctoring-Token': 'CreateAMoreSecureSecretKeyHere123!'
+                    },
+                    body: JSON.stringify({ attemptId, imageData })
+                });
+
+                const data = await response.json();
+                if (data.analysis && (data.analysis.multipleFaces || data.analysis.noFace)) {
+                    showProctoringAlert();
+                }
+            } catch (error) {
+                console.error('Proctoring error:', error);
+            }
+        }
+
+        function showProctoringAlert() {
+            const alert = document.getElementById('proctoring-alert');
+            alert.style.display = 'block';
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 3000);
+        }
+
+        // Prevent cheating
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                console.warn('User switched tabs!');
+                // Log this event
+            }
+        });
+
+        // Initialize exam on load
+        initializeExam();
+    </script>
+</body>
+
+</html>

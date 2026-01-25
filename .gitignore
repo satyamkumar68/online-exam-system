@@ -1,0 +1,32 @@
+# User Specific
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+.settings/
+.classpath
+.project
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+env/
+.env
+
+# Node / Web
+node_modules/
+dist/
+.npm/
+
+# Project Specific
+backend/sample_questions.csv
+*.log

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Online Examination System</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="dashboard.html" class="navbar-brand">📚 Admin Portal</a>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html" class="navbar-link active">Dashboard</a></li>
+                <li><a href="exams.html" class="navbar-link">Exams</a></li>
+                <li><a href="students.html" class="navbar-link">Students</a></li>
+                <li id="user-info"></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container" style="margin-top: 2rem;">
+        <div id="alert-container"></div>
+
+        <!-- Welcome Section -->
+        <div class="card mb-4">
+            <h1 style="color: var(--primary-color); margin-bottom: 0.5rem;">Admin Dashboard 👨‍💼</h1>
+            <p style="color: var(--text-secondary);">Welcome back, <span id="admin-name"></span>! Here's your system
+                overview.</p>
+        </div>
+
+        <!-- Statistics Grid -->
+        <div class="grid grid-4 mb-4">
+            <div class="stat-card" style="border-left-color: var(--primary-color);">
+                <div class="stat-value" id="total-exams">0</div>
+                <div class="stat-label">Total Exams</div>
+            </div>
+            <div class="stat-card" style="border-left-color: var(--success-color);">
+                <div class="stat-value" id="total-students">0</div>
+                <div class="stat-label">Total Students</div>
+            </div>
+            <div class="stat-card" style="border-left-color: var(--accent-color);">
+                <div class="stat-value" id="active-exams">0</div>
+                <div class="stat-label">Active Exams</div>
+            </div>
+            <div class="stat-card" style="border-left-color: var(--info-color);">
+                <div class="stat-value" id="total-attempts">0</div>
+                <div class="stat-label">Total Attempts</div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2 class="card-title">⚡ Quick Actions</h2>
+            </div>
+            <div class="d-flex gap-3" style="flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="window.location.href='create-exam.html'">
+                    ➕ Create New Exam
+                </button>
+                <button class="btn btn-secondary" onclick="window.location.href='exams.html'">
+                    📝 Manage Exams
+                </button>
+                <button class="btn btn-outline" onclick="window.location.href='students.html'">
+                    👥 View Students
+                </button>
+            </div>
+        </div>
+
+        <!-- Recent Exams -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">📚 Recent Exams</h2>
+                <p class="card-subtitle">Latest exams in the system</p>
+            </div>
+            <div id="recent-exams-container">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js?v=3"></script>
+    <script src="../js/auth.js?v=3"></script>
+    <script>
+        if (!checkAuth('ADMIN')) {
+            window.location.href = '../login.html';
+        }
+
+        async function loadDashboard() {
+            const user = getUser();
+            document.getElementById('admin-name').textContent = user.fullName;
+
+            try {
+                const response = await apiRequest('/admin/dashboard');
+
+                if (response.success) {
+                    updateStatistics(response.data);
+                    displayRecentExams(response.data.recentExams || []);
+                }
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                // Set default values
+                document.getElementById('recent-exams-container').innerHTML =
+                    '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No exams created yet.</p>';
+            }
+        }
+
+        function updateStatistics(data) {
+            document.getElementById('total-exams').textContent = data?.totalExams || 0;
+            document.getElementById('total-students').textContent = data?.totalStudents || 0;
+            document.getElementById('active-exams').textContent = data?.activeExams || 0;
+            document.getElementById('total-attempts').textContent = data?.totalAttempts || 0;
+        }
+
+        function displayRecentExams(exams) {
+            const container = document.getElementById('recent-exams-container');
+
+            if (exams.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No exams created yet. Create your first exam!</p>';
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Exam Title</th>
+                                <th>Duration</th>
+                                <th>Total Marks</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${exams.map(exam => `
+                                <tr>
+                                    <td><strong>${exam.examTitle}</strong></td>
+                                    <td>${exam.durationMinutes} min</td>
+                                    <td>${exam.totalMarks}</td>
+                                    <td>
+                                        <span class="badge ${exam.isActive ? 'badge-success' : 'badge-danger'}">
+                                            ${exam.isActive ? 'Active' : 'Inactive'}
+                                        </span>
+                                    </td>
+                                    <td>${formatDate(exam.createdAt)}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary" onclick="viewExam(${exam.examId})">View</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function viewExam(examId) {
+            window.location.href = `exams.html?examId=${examId}`;
+        }
+
+        loadDashboard();
+    </script>
+</body>
+
+</html>

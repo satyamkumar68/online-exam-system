@@ -1,0 +1,60 @@
+{
+  "19": [
+    {
+      "attemptId": 19,
+      "eventType": "FACE_DETECTED",
+      "description": "Student face detected",
+      "severity": "LOW",
+      "timestamp": "2026-01-25T11:37:44.084529"
+    },
+    {
+      "attemptId": 19,
+      "eventType": "NO_FACE",
+      "description": "Face not detected",
+      "severity": "MEDIUM",
+      "timestamp": "2026-01-25T11:37:48.354040"
+    },
+    {
+      "attemptId": 19,
+      "eventType": "NO_FACE",
+      "description": "Face not detected",
+      "severity": "MEDIUM",
+      "timestamp": "2026-01-25T11:37:53.962215"
+    },
+    {
+      "attemptId": 19,
+      "eventType": "NO_FACE",
+      "description": "Face not detected for extended period",
+      "severity": "HIGH",
+      "timestamp": "2026-01-25T11:37:58.352919"
+    },
+    {
+      "attemptId": 19,
+      "eventType": "NO_FACE",
+      "description": "Face not detected for extended period",
+      "severity": "HIGH",
+      "timestamp": "2026-01-25T11:38:03.924508"
+    },
+    {
+      "attemptId": 19,
+      "eventType": "FACE_DETECTED",
+      "description": "Student face detected",
+      "severity": "LOW",
+      "timestamp": "2026-01-25T11:38:08.368737"
+    },
+    {
+      "attemptId": 19,
+      "eventType": "NO_FACE",
+      "description": "Face not detected for extended period",
+      "severity": "HIGH",
+      "timestamp": "2026-01-25T11:38:13.936831"
+    },
+    {
+      "attemptId": 19,
+      "eventType": "NO_FACE",
+      "description": "Face not detected for extended period",
+      "severity": "HIGH",
+      "timestamp": "2026-01-25T11:38:18.362889"
+    }
+  ]
+}

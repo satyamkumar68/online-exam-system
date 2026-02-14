@@ -30,3 +30,10 @@ dist/
 # Project Specific
 backend/sample_questions.csv
 *.log
+
+# Sensitive Configuration Files (DO NOT COMMIT!)
+.env
+*.env
+backend/src/main/resources/application.properties
+**/application.properties
+application-*.properties

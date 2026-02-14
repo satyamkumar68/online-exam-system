@@ -1,67 +1,42 @@
 package com.exam.system.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import javax.persistence.*;
-import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
-/**
- * Entity class representing an Exam
- */
 @Entity
 @Table(name = "exams")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonIgnoreProperties({ "hibernateLazyInitializer", "handler", "createdBy" })
 public class Exam {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "exam_id")
-    private Long examId;
+    private Long id;
 
-    @Column(name = "exam_title", nullable = false, length = 200)
-    private String examTitle;
+    @Column(nullable = false)
+    private String title;
 
-    @Column(name = "exam_description", columnDefinition = "TEXT")
-    private String examDescription;
+    @Column(columnDefinition = "TEXT")
+    private String description;
 
-    @Column(name = "duration_minutes", nullable = false)
-    private Integer durationMinutes;
-
-    @Column(name = "total_marks", nullable = false)
-    private Integer totalMarks;
-
-    @Column(name = "passing_marks", nullable = false)
-    private Integer passingMarks;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by", nullable = false)
-    private User createdBy;
-
-    // Added to handle deletion of exam with attempts
-    @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
-    @com.fasterxml.jackson.annotation.JsonIgnore
-    private java.util.List<ExamAttempt> attempts;
-
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    @Column(name = "max_time_minutes")
+    private Integer maxTimeMinutes;
 
     @Column(name = "is_active")
     private Boolean isActive = true;
 
+    // Optional: OneToMany relationship if you want to cascade operations
+    // @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval =
+    // true)
+    // private List<Question> questions = new ArrayList<>();
     @Column(name = "start_time")
-    private LocalDateTime startTime;
+    private java.time.LocalDateTime startTime;
 
     @Column(name = "end_time")
-    private LocalDateTime endTime;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
+    private java.time.LocalDateTime endTime;
 }

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Questions - Online Examination System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="admin_dashboard.html">Admin Panel</a>
+            <a href="admin_dashboard.html" class="btn btn-outline-light btn-sm">
+                <i class="bi bi-house-door"></i> Return to Dashboard
+            </a>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h3>Add Questions to Exam <span id="examIdDisplay"></span></h3>
+
+        <!-- Tabs for Question Bank vs Create New -->
+        <ul class="nav nav-tabs mb-3" id="questionTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="bank-tab" data-bs-toggle="tab" data-bs-target="#bank" type="button">
+                    Select from Question Bank
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="create-tab" data-bs-toggle="tab" data-bs-target="#create" type="button">
+                    Create New Question
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="questionTabsContent">
+            <!-- Question Bank Tab -->
+            <div class="tab-pane fade show active" id="bank" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Question Bank</span>
+                                <select class="form-select form-select-sm w-auto" id="categoryFilterExam"
+                                    onchange="filterBankQuestions()">
+                                    <option value="">All Categories</option>
+                                </select>
+                            </div>
+                            <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                                <div id="bankQuestionsList">
+                                    <div class="text-center py-3">
+                                        <div class="spinner-border text-primary" role="status"></div>
+                                        <p class="text-muted mt-2">Loading questions...</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-footer">
+                                <button class="btn btn-primary" onclick="addSelectedQuestions()">Add Selected to
+                                    Exam</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">Exam Questions</div>
+                            <div class="card-body">
+                                <ul class="list-group" id="examQuestionsList">
+                                    <!-- Questions loaded here -->
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Create New Question Tab -->
+            <div class="tab-pane fade" id="create" role="tabpanel">
+                <div class="row">
+                    <!-- Add Question Form -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">New Question</div>
+                            <div class="card-body">
+                                <form id="addQuestionForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">Question Text</label>
+                                        <textarea class="form-control" id="content" rows="3" required></textarea>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Option 1</label>
+                                        <input type="text" class="form-control" id="option1" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Option 2</label>
+                                        <input type="text" class="form-control" id="option2" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Option 3</label>
+                                        <input type="text" class="form-control" id="option3" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Option 4</label>
+                                        <input type="text" class="form-control" id="option4" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Correct Answer</label>
+                                        <select class="form-select" id="answer" required>
+                                            <option value="option1">Option 1</option>
+                                            <option value="option2">Option 2</option>
+                                            <option value="option3">Option 3</option>
+                                            <option value="option4">Option 4</option>
+                                        </select>
+                                    </div>
+                                    <div id="message" class="alert d-none"></div>
+                                    <button type="submit" class="btn btn-primary">Add Question</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Existing Questions List -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Existing Questions</div>
+                            <div class="card-body">
+                                <ul class="list-group" id="questionsList">
+                                    <!-- Questions loaded here -->
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        checkAuth();
+        const urlParams = new URLSearchParams(window.location.search);
+        const examId = urlParams.get('examId');
+        document.getElementById('examIdDisplay').textContent = `#${examId}`;
+
+        if (!examId) {
+            alert('No Exam ID provided');
+            window.location.href = 'admin_dashboard.html';
+        }
+
+        let allBankQuestions = [];
+        let selectedQuestionIds = new Set();
+
+        // Load questions from question bank
+        async function loadBankQuestions() {
+            try {
+                const response = await apiFetch('/admin/question-bank');
+                if (response.ok) {
+                    allBankQuestions = await response.json();
+                    renderBankQuestions(allBankQuestions);
+                    loadBankCategories();
+                }
+            } catch (error) {
+                console.error("Error loading bank questions:", error);
+            }
+        }
+
+        async function loadBankCategories() {
+            try {
+                const response = await apiFetch('/admin/question-bank/categories');
+                if (response.ok) {
+                    const categories = await response.json();
+                    const select = document.getElementById('categoryFilterExam');
+                    select.innerHTML = '<option value="">All Categories</option>';
+                    categories.forEach(cat => {
+                        const option = document.createElement('option');
+                        option.value = cat;
+                        option.textContent = cat;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error("Error loading categories:", error);
+            }
+        }
+
+        function renderBankQuestions(questions) {
+            const container = document.getElementById('bankQuestionsList');
+            container.innerHTML = '';
+
+            if (questions.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center py-3">No questions in bank yet.</p>';
+                return;
+            }
+
+            questions.forEach(q => {
+                const div = document.createElement('div');
+                div.className = 'form-check border-bottom pb-2 mb-2';
+                div.innerHTML = `
+                    <input class="form-check-input" type="checkbox" value="${q.id}" id="q${q.id}" 
+                           ${selectedQuestionIds.has(q.id) ? 'checked' : ''} 
+                           onchange="toggleQuestion(${q.id})">
+                    <label class="form-check-label w-100" for="q${q.id}">
+                        <div class="fw-bold">${q.content}</div>
+                        <small class="text-muted">Category: ${q.category || 'Uncategorized'}</small>
+                    </label>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function filterBankQuestions() {
+            const category = document.getElementById('categoryFilterExam').value;
+            if (category === '') {
+                renderBankQuestions(allBankQuestions);
+            } else {
+                const filtered = allBankQuestions.filter(q => q.category === category);
+                renderBankQuestions(filtered);
+            }
+        }
+
+        function toggleQuestion(questionId) {
+            if (selectedQuestionIds.has(questionId)) {
+                selectedQuestionIds.delete(questionId);
+            } else {
+                selectedQuestionIds.add(questionId);
+            }
+        }
+
+        async function addSelectedQuestions() {
+            if (selectedQuestionIds.size === 0) {
+                alert('Please select at least one question');
+                return;
+            }
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const questionId of selectedQuestionIds) {
+                try {
+                    const response = await apiFetch(`/admin/exams/${examId}/add-bank-question/${questionId}`, {
+                        method: 'POST'
+                    });
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                } catch (error) {
+                    console.error(`Error adding question ${questionId}:`, error);
+                    failCount++;
+                }
+            }
+
+            alert(`Added ${successCount} question(s) successfully!${failCount > 0 ? ` ${failCount} failed.` : ''}`);
+            selectedQuestionIds.clear();
+            loadQuestions();
+            loadExamQuestions();
+            loadBankQuestions();
+        }
+
+        async function loadQuestions() {
+            try {
+                const response = await apiFetch(`/admin/exams/${examId}/questions`);
+                if (response.ok) {
+                    const questions = await response.json();
+                    const list = document.getElementById('questionsList');
+                    list.innerHTML = '';
+
+                    if (questions.length === 0) {
+                        list.innerHTML = '<li class="list-group-item">No questions added yet.</li>';
+                        return;
+                    }
+
+                    questions.forEach((q, index) => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item';
+                        li.innerHTML = `
+                            <strong>Q${index + 1}:</strong> ${q.content}<br>
+                            <small class="text-muted">Ans: ${q.answer}</small>
+                        `;
+                        list.appendChild(li);
+                    });
+                }
+            } catch (error) {
+                console.error("Error loading questions:", error);
+            }
+        }
+
+        async function loadExamQuestions() {
+            try {
+                const response = await apiFetch(`/admin/exams/${examId}/questions`);
+                if (response.ok) {
+                    const questions = await response.json();
+                    const list = document.getElementById('examQuestionsList');
+                    list.innerHTML = '';
+
+                    if (questions.length === 0) {
+                        list.innerHTML = '<li class="list-group-item">No questions added yet.</li>';
+                        return;
+                    }
+
+                    questions.forEach((q, index) => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item';
+                        li.innerHTML = `
+                            <strong>Q${index + 1}:</strong> ${q.content.substring(0, 50)}...
+                        `;
+                        list.appendChild(li);
+                    });
+                }
+            } catch (error) {
+                console.error("Error loading exam questions:", error);
+            }
+        }
+
+        document.getElementById('addQuestionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const questionData = {
+                examId: parseInt(examId),
+                content: document.getElementById('content').value,
+                option1: document.getElementById('option1').value,
+                option2: document.getElementById('option2').value,
+                option3: document.getElementById('option3').value,
+                option4: document.getElementById('option4').value,
+                answer: document.getElementById('answer').value
+            };
+
+            const msgDiv = document.getElementById('message');
+
+            try {
+                const response = await apiFetch('/admin/questions', {
+                    method: 'POST',
+                    body: JSON.stringify(questionData)
+                });
+
+                if (response.ok) {
+                    msgDiv.className = 'alert alert-success';
+                    msgDiv.textContent = 'Question added!';
+                    msgDiv.classList.remove('d-none');
+                    document.getElementById('addQuestionForm').reset();
+                    loadQuestions(); // Refresh list
+                    setTimeout(() => msgDiv.classList.add('d-none'), 2000);
+                } else {
+                    const data = await response.json();
+                    msgDiv.className = 'alert alert-danger';
+                    msgDiv.textContent = data.message || 'Error adding question';
+                    msgDiv.classList.remove('d-none');
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        });
+
+        loadQuestions();
+        loadBankQuestions();
+        loadExamQuestions();
+    </script>
+</body>
+
+</html>

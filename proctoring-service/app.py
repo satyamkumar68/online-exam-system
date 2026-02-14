@@ -1,255 +1,132 @@
-"""
-AI-Based Proctoring Service
-Flask application for real-time exam proctoring using OpenCV
-"""
+from flask import Flask, jsonify, request
+import requests
+import os
+import logging
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+app = Flask(__name__)
+
+# Configuration
+PORT = 7003
+BACKEND_URL = "http://127.0.0.1:8081/api"
+
+# Logging setup
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "healthy",
+        "service": "AI Proctoring Service",
+        "backend_url": BACKEND_URL
+    })
+
+@app.route('/start_proctoring', methods=['POST'])
+def start_proctoring():
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        exam_id = data.get('exam_id')
+        
+        logger.info(f"Starting proctoring for User {user_id}, Exam {exam_id}")
+        
+        # In a real app, this would start a background thread for webcam monitoring
+        # For now, we just verify connection to backend
+        
+        return jsonify({
+            "status": "started",
+            "message": "Proctoring session initialized"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error starting proctoring: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 import cv2
 import numpy as np
 import base64
-from datetime import datetime
-import requests
-from modules.face_detector import FaceDetector
-from modules.multi_face_detector import MultiFaceDetector
-from modules.absence_detector import AbsenceDetector
-from modules.logger import ProctoringLogger
 
-app = Flask(__name__)
-CORS(app)
+# Load Haar Cascade for face detection
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-# Initialize detectors
-face_detector = FaceDetector()
-multi_face_detector = MultiFaceDetector()
-absence_detector = AbsenceDetector()
-logger = ProctoringLogger()
+@app.route('/process_frame', methods=['POST', 'OPTIONS'])
+def process_frame():
+    if request.method == 'OPTIONS':
+        # Handle CORS preflight
+        response = jsonify({'status': 'ok'})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        return response
 
-# Backend API URL
-BACKEND_URL = "http://localhost:8081/api"
-
-import os
-from dotenv import load_dotenv
-from functools import wraps
-
-load_dotenv()
-PROCTORING_SECRET_KEY = os.getenv('PROCTORING_SECRET_KEY')
-
-def require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = request.headers.get('X-Proctoring-Token')
-        if not token or token != PROCTORING_SECRET_KEY:
-            return jsonify({'success': False, 'message': 'Unauthorized'}), 401
-        return f(*args, **kwargs)
-    return decorated
-
-@app.route('/proctoring/start', methods=['POST'])
-@require_auth
-def start_proctoring():
-    """Start a proctoring session"""
     try:
         data = request.json
-        attempt_id = data.get('attemptId')
+        image_data = data.get('image')
         
-        if not attempt_id:
-            return jsonify({'success': False, 'message': 'Attempt ID required'}), 400
-        
-        # Initialize session
-        logger.log_event(attempt_id, 'SESSION_START', 'Proctoring session started', 'LOW')
-        
-        return jsonify({
-            'success': True,
-            'message': 'Proctoring started',
-            'attemptId': attempt_id
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        if not image_data:
+            return jsonify({"status": "error", "message": "No image data"}), 400
 
-
-@app.route('/proctoring/capture', methods=['POST'])
-@require_auth
-def capture_frame():
-    """Capture and analyze a frame from webcam"""
-    try:
-        data = request.json
-        attempt_id = data.get('attemptId')
-        image_data = data.get('imageData')
-        
-        if not attempt_id or not image_data:
-            return jsonify({'success': False, 'message': 'Missing data'}), 400
-        
         # Decode base64 image
-        try:
-            image = decode_base64_image(image_data)
+        # Remove data:image/jpeg;base64, prefix if present
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
             
-            # Validate image
-            if image is None or image.size == 0:
-                print(f"Warning: Invalid image data for attempt {attempt_id}")
-                return jsonify({
-                    'success': True,
-                    'analysis': {
-                        'faceDetected': False,
-                        'multipleFaces': False,
-                        'noFace': True,
-                        'events': []
-                    }
-                })
-        except Exception as decode_error:
-            print(f"Error decoding image: {str(decode_error)}")
-            return jsonify({
-                'success': True,
-                'analysis': {
-                    'faceDetected': False,
-                    'multipleFaces': False,
-                    'noFace': True,
-                    'events': []
-                }
-            })
+        decoded_data = base64.b64decode(image_data)
+        np_data = np.frombuffer(decoded_data, np.uint8)
+        frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+
+        if frame is None:
+             logger.error("Failed to decode image")
+             return jsonify({"status": "error", "message": "Failed to decode image"}), 400
+
+        # Save for debugging (overwrite each time to save space)
+        cv2.imwrite("debug_last_received.jpg", frame)
+
+        # Face Detection
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
-        # Analyze frame with error handling
-        try:
-            analysis_result = analyze_frame(image, attempt_id)
-        except Exception as analysis_error:
-            print(f"Error analyzing frame: {str(analysis_error)}")
-            # Return safe default analysis
-            analysis_result = {
-                'faceDetected': False,
-                'multipleFaces': False,
-                'noFace': True,
-                'events': []
-            }
+        # Check brightness
+        brightness = np.mean(gray)
         
-        return jsonify({
-            'success': True,
-            'analysis': analysis_result
+        # Try detecting with RELAXED scale factors
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
+        
+        face_count = len(faces)
+        
+        # Draw rectangles for debug
+        for (x, y, w, h) in faces:
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
+        cv2.imwrite("debug_last_processed.jpg", frame)
+        
+        status = "clean"
+        message = "Session normal"
+        
+        if brightness < 50:
+            status = "warning"
+            message = "Lighting too low. Please check your lights."
+        elif face_count == 0:
+            status = "warning"
+            message = "No face detected. Please look at the camera."
+        elif face_count > 1:
+            status = "violation"
+            message = "Multiple faces detected!"
+
+        logger.info(f"Proctoring: {face_count} faces. Brightness: {brightness:.2f}. Status: {status}")
+
+        response = jsonify({
+            "status": status,
+            "message": message,
+            "face_count": face_count,
+            "brightness": brightness
         })
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        return response
+
     except Exception as e:
-        print(f"Error in capture_frame: {str(e)}")
-        # Return success with safe defaults to prevent blocking the exam
-        return jsonify({
-            'success': True,
-            'analysis': {
-                'faceDetected': False,
-                'multipleFaces': False,
-                'noFace': True,
-                'events': []
-            }
-        })
-
-
-@app.route('/proctoring/status/<int:attempt_id>', methods=['GET'])
-def get_status(attempt_id):
-    """Get proctoring status for an attempt"""
-    try:
-        logs = logger.get_logs(attempt_id)
-        
-        return jsonify({
-            'success': True,
-            'attemptId': attempt_id,
-            'totalEvents': len(logs),
-            'logs': logs
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-
-def decode_base64_image(image_data):
-    """Decode base64 image to OpenCV format"""
-    # Remove data URL prefix if present
-    if 'base64,' in image_data:
-        image_data = image_data.split('base64,')[1]
-    
-    # Decode base64
-    image_bytes = base64.b64decode(image_data)
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-    return image
-
-
-def analyze_frame(image, attempt_id):
-    """Analyze frame for suspicious activities"""
-    results = {
-        'faceDetected': False,
-        'multipleFaces': False,
-        'noFace': False,
-        'events': []
-    }
-    
-    try:
-        # Detect faces
-        faces = face_detector.detect_faces(image)
-        num_faces = len(faces)
-        
-        if num_faces == 0:
-            # No face detected
-            results['noFace'] = True
-            absence_detector.record_absence(attempt_id)
-            
-            if absence_detector.is_suspicious(attempt_id):
-                log_to_backend(attempt_id, 'NO_FACE', 
-                              'Face not detected for extended period', 'HIGH')
-                results['events'].append('NO_FACE_ALERT')
-            else:
-                log_to_backend(attempt_id, 'NO_FACE', 
-                              'Face not detected', 'MEDIUM')
-        
-        elif num_faces == 1:
-            # Single face detected (normal)
-            results['faceDetected'] = True
-            absence_detector.reset_absence(attempt_id)
-            log_to_backend(attempt_id, 'FACE_DETECTED', 
-                          'Student face detected', 'LOW')
-        
-        elif num_faces > 1:
-            # Multiple faces detected (suspicious)
-            results['multipleFaces'] = True
-            results['faceCount'] = num_faces
-            log_to_backend(attempt_id, 'MULTIPLE_FACES', 
-                          f'{num_faces} faces detected in frame', 'HIGH')
-            results['events'].append('MULTIPLE_FACES_ALERT')
-    
-    except Exception as e:
-        print(f"Error in face detection: {str(e)}")
-        # Return safe defaults on error
-        results['noFace'] = True
-    
-    return results
-
-
-def log_to_backend(attempt_id, event_type, description, severity):
-    """Log proctoring event to backend"""
-    try:
-        # This would send to the Spring Boot backend
-        logger.log_event(attempt_id, event_type, description, severity)
-        
-        # Send to backend
-        try:
-            requests.post(f"{BACKEND_URL}/proctoring/log", json={
-                'attemptId': attempt_id,
-                'eventType': event_type,
-                'description': description,
-                'severity': severity
-            }, headers={'Content-Type': 'application/json'})
-        except Exception as api_error:
-            print(f"Failed to push to backend: {str(api_error)}")
-    except Exception as e:
-        print(f"Error logging to backend: {str(e)}")
-
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'service': 'AI Proctoring Service',
-        'version': '1.0.0'
-    })
-
+        logger.error(f"Error processing frame: {str(e)}")
+        response = jsonify({"status": "error", "message": str(e)})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        return response, 500
 
 if __name__ == '__main__':
-    print("=" * 50)
-    print("AI Proctoring Service Starting...")
-    print("Server running on: http://localhost:5000")
-    print("=" * 50)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print(f"Starting Proctoring Service on port {PORT}...")
+    app.run(host='127.0.0.1', port=PORT, debug=True)

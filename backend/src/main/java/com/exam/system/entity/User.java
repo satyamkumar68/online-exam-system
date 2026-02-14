@@ -1,15 +1,10 @@
 package com.exam.system.entity;
 
-import lombok.AllArgsConstructor;
+import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
-import javax.persistence.*;
-import java.time.LocalDateTime;
-
-/**
- * Entity class representing a User (Admin or Student)
- */
 @Entity
 @Table(name = "users")
 @Data
@@ -20,36 +15,24 @@ public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
-    private Long userId;
+    private Long id;
 
-    @Column(name = "username", unique = true, nullable = false, length = 50)
+    @Column(unique = true, nullable = false)
     private String username;
 
-    @Column(name = "email", unique = true, nullable = false, length = 100)
-    private String email;
-
-    @Column(name = "password", nullable = false)
+    @Column(nullable = false)
     private String password;
 
-    @Column(name = "full_name", nullable = false, length = 100)
+    @Column(nullable = false)
+    private String email;
+
+    @Column(name = "full_name")
     private String fullName;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "role", nullable = false)
-    private UserRole role = UserRole.STUDENT;
+    private Role role;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "is_active")
-    private Boolean isActive = true;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
-
-    public enum UserRole {
+    public enum Role {
         ADMIN, STUDENT
     }
 }

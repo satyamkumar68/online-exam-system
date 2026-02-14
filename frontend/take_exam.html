@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Take Exam - Online Examination System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .question-card {
+            display: none;
+        }
+
+        .question-card.active {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-dark bg-secondary">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1">Exam in Progress</span>
+            <span class="text-white" id="timer">00:00</span>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        <div id="loading" class="text-center">Loading exam...</div>
+
+        <div id="examContainer" class="d-none">
+            <h3 id="examTitle"></h3>
+            <hr>
+
+            <form id="examForm">
+                <div id="questionsContainer">
+                    <!-- Questions injected here -->
+                </div>
+
+                <div class="mt-4 d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary" id="prevBtn" onclick="changeQuestion(-1)"
+                        disabled>Previous</button>
+                    <div>
+                        <span id="qCount"></span>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="nextBtn" onclick="changeQuestion(1)">Next</button>
+                    <button type="submit" class="btn btn-success d-none" id="submitBtn">Submit Exam</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Result Modal -->
+    <div class="modal" tabindex="-1" id="resultModal" data-bs-backdrop="static">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Exam Submitted</h5>
+                </div>
+                <div class="modal-body">
+                    <p id="resultMessage"></p>
+                </div>
+                <div class="modal-footer">
+                    <a href="student_dashboard.html" class="btn btn-primary">Back to Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="proctor-view"
+        style="position: fixed; bottom: 20px; right: 20px; width: 150px; height: 112px; background: #000; border: 2px solid #dc3545; z-index: 1000; border-radius: 8px; overflow: hidden; display: none;">
+        <video id="webcam" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+    </div>
+    <div id="proctor-alert" class="alert alert-danger"
+        style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 2000; display: none;">
+        <strong>Warning:</strong> <span id="alert-msg"></span>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        checkAuth();
+        const urlParams = new URLSearchParams(window.location.search);
+        const examId = urlParams.get('examId');
+        let proctorInterval;
+
+        if (!examId) window.location.href = 'student_dashboard.html';
+
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let answers = {};
+        let examData = null;
+        let timerInterval = null;
+        let webcamStream = null;
+
+        // Proctoring Logic
+        async function startProctoring() {
+            try {
+                const video = document.getElementById('webcam');
+                // Request camera
+                webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                video.srcObject = webcamStream;
+                document.getElementById('proctor-view').style.display = 'block';
+
+                // Capture frame every 5 seconds
+                proctorInterval = setInterval(captureAndSendFrame, 5000);
+            } catch (err) {
+                alert("Camera access is required for this exam. Please allow camera access.");
+                console.error("Camera error:", err);
+            }
+        }
+
+        // Cleanup webcam on page unload
+        window.addEventListener('beforeunload', () => {
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+            }
+            if (proctorInterval) {
+                clearInterval(proctorInterval);
+            }
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+        });
+
+        async function captureAndSendFrame() {
+            const video = document.getElementById('webcam');
+            const canvas = document.createElement('canvas');
+            canvas.width = 320;
+            canvas.height = 240;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = canvas.toDataURL('image/jpeg', 0.5);
+
+            try {
+                // Point to Python Service directly
+                const response = await fetch('http://127.0.0.1:7003/process_frame', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
+                });
+                const data = await response.json();
+
+                const alertBox = document.getElementById('proctor-alert');
+
+                if (data.status === 'violation' || data.status === 'warning') {
+                    document.getElementById('alert-msg').textContent = data.message;
+                    alertBox.style.display = 'block';
+                    setTimeout(() => alertBox.style.display = 'none', 3000);
+                }
+            } catch (err) {
+                console.error("Proctoring service error:", err);
+            }
+        }
+
+        // Tab Switching
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                alert("WARNING: You switched tabs! This is recorded.");
+            }
+        });
+
+        async function loadExam() {
+            await startProctoring(); // Start Camera
+
+            try {
+                // Get exam details first
+                const examResponse = await apiFetch(`/student/exams`);
+                if (examResponse.ok) {
+                    const exams = await examResponse.json();
+                    examData = exams.find(e => e.id == examId);
+                }
+
+                const response = await apiFetch(`/student/exams/${examId}/questions`);
+                if (response.ok) {
+                    questions = await response.json();
+                    if (questions.length === 0) {
+                        alert("No questions in this exam.");
+                        window.location.href = 'student_dashboard.html';
+                        return;
+                    }
+                    renderQuestions();
+                    document.getElementById('loading').classList.add('d-none');
+                    document.getElementById('examContainer').classList.remove('d-none');
+                    updateNav();
+                    // Use exam duration or default to 60
+                    const duration = examData?.maxTimeMinutes || 60;
+                    startTimer(duration);
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Failed to load exam.");
+            }
+        }
+
+        function renderQuestions() {
+            const container = document.getElementById('questionsContainer');
+            questions.forEach((q, index) => {
+                const div = document.createElement('div');
+                div.className = `question-card ${index === 0 ? 'active' : ''}`;
+                div.dataset.index = index;
+
+                // Create elements safely to prevent XSS
+                const heading = document.createElement('h5');
+                heading.textContent = `Question ${index + 1}`;
+
+                const questionText = document.createElement('p');
+                questionText.textContent = q.content;
+
+                div.appendChild(heading);
+                div.appendChild(questionText);
+
+                // Create radio options
+                const options = [
+                    { value: 'option1', text: q.option1 },
+                    { value: 'option2', text: q.option2 },
+                    { value: 'option3', text: q.option3 },
+                    { value: 'option4', text: q.option4 }
+                ];
+
+                options.forEach((opt, i) => {
+                    const formCheck = document.createElement('div');
+                    formCheck.className = 'form-check';
+
+                    const input = document.createElement('input');
+                    input.className = 'form-check-input';
+                    input.type = 'radio';
+                    input.name = `q${q.id}`;
+                    input.value = opt.value;
+                    input.id = `q${q.id}o${i + 1}`;
+
+                    const label = document.createElement('label');
+                    label.className = 'form-check-label';
+                    label.htmlFor = input.id;
+                    label.textContent = opt.text;
+
+                    formCheck.appendChild(input);
+                    formCheck.appendChild(label);
+                    div.appendChild(formCheck);
+
+                    // Add listener to save answer
+                    input.addEventListener('change', (e) => {
+                        answers[q.id] = e.target.value;
+                    });
+                });
+
+                container.appendChild(div);
+            });
+        }
+
+        window.changeQuestion = function (delta) {
+            const cards = document.querySelectorAll('.question-card');
+            cards[currentQuestionIndex].classList.remove('active');
+            currentQuestionIndex += delta;
+            cards[currentQuestionIndex].classList.add('active');
+            updateNav();
+        };
+
+        function updateNav() {
+            document.getElementById('prevBtn').disabled = currentQuestionIndex === 0;
+            const isLast = currentQuestionIndex === questions.length - 1;
+            document.getElementById('nextBtn').classList.toggle('d-none', isLast);
+            document.getElementById('submitBtn').classList.toggle('d-none', !isLast);
+            document.getElementById('qCount').textContent = `Question ${currentQuestionIndex + 1} of ${questions.length}`;
+        }
+
+        function startTimer(minutes) {
+            let seconds = minutes * 60;
+            const timerEl = document.getElementById('timer');
+            timerInterval = setInterval(() => {
+                seconds--;
+                const m = Math.floor(seconds / 60);
+                const s = seconds % 60;
+                timerEl.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+                if (seconds <= 0) {
+                    clearInterval(timerInterval);
+                    submitExam();
+                }
+            }, 1000);
+        }
+
+        document.getElementById('examForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await submitExam();
+        });
+
+        async function submitExam() {
+            // Validate that at least some questions are answered
+            const answeredCount = Object.keys(answers).length;
+            if (answeredCount === 0) {
+                const confirmSubmit = confirm('You have not answered any questions. Are you sure you want to submit?');
+                if (!confirmSubmit) return;
+            } else if (answeredCount < questions.length) {
+                const unanswered = questions.length - answeredCount;
+                const confirmSubmit = confirm(`You have ${unanswered} unanswered question(s). Are you sure you want to submit?`);
+                if (!confirmSubmit) return;
+            }
+
+            // Clear intervals and stop webcam
+            if (proctorInterval) clearInterval(proctorInterval);
+            if (timerInterval) clearInterval(timerInterval);
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+            }
+
+            const payload = {
+                examId: parseInt(examId),
+                answers: answers
+            };
+
+            try {
+                const response = await apiFetch('/student/exams/submit', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('resultMessage').textContent = data.message;
+                    new bootstrap.Modal(document.getElementById('resultModal')).show();
+                } else {
+                    alert("Submission failed.");
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Error submitting exam.");
+            }
+        }
+
+        loadExam();
+    </script>
+</body>
+
+</html>

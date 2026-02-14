@@ -1,191 +1,199 @@
 package com.exam.system.controller;
 
-import com.exam.system.dto.ApiResponse;
-import com.exam.system.dto.CreateExamRequest;
 import com.exam.system.entity.Exam;
+import com.exam.system.entity.Question;
 import com.exam.system.entity.User;
-import com.exam.system.repository.ExamAttemptRepository;
+import com.exam.system.entity.ExamResult;
+import com.exam.system.payload.request.ExamRequest;
+import com.exam.system.payload.request.QuestionRequest;
+import com.exam.system.payload.response.MessageResponse;
+import com.exam.system.repository.ExamRepository;
+import com.exam.system.repository.ExamResultRepository;
+import com.exam.system.repository.QuestionRepository;
 import com.exam.system.repository.UserRepository;
-import com.exam.system.service.ExamService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import javax.validation.Valid;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 
-/**
- * REST Controller for Admin endpoints
- */
 @RestController
-@RequestMapping("/admin")
+@RequestMapping("/api/admin")
+@PreAuthorize("hasAuthority('ADMIN')")
 public class AdminController {
 
     @Autowired
-    private ExamService examService;
+    ExamRepository examRepository;
 
     @Autowired
-    private UserRepository userRepository;
+    QuestionRepository questionRepository;
 
     @Autowired
-    private ExamAttemptRepository examAttemptRepository;
+    UserRepository userRepository;
 
-    /**
-     * Create a new exam
-     */
+    // --- Exam Management ---
+
     @PostMapping("/exams")
-    public ResponseEntity<?> createExam(@Valid @RequestBody CreateExamRequest request) {
-        try {
-            // Get current authenticated user
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            String username = authentication.getName();
+    public ResponseEntity<?> createExam(@Valid @RequestBody ExamRequest examRequest) {
+        Exam exam = new Exam();
+        exam.setTitle(examRequest.getTitle());
+        exam.setDescription(examRequest.getDescription());
+        exam.setMaxTimeMinutes(examRequest.getMaxTimeMinutes());
+        exam.setStartTime(examRequest.getStartTime());
+        exam.setEndTime(examRequest.getEndTime());
+        exam.setIsActive(true);
 
-            Exam exam = examService.createExam(request, username);
-            return ResponseEntity.ok(new ApiResponse(true, "Exam created successfully", exam));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Failed to create exam: " + e.getMessage()));
-        }
+        examRepository.save(exam);
+        return ResponseEntity.ok(new MessageResponse("Exam created successfully!"));
     }
 
-    /**
-     * Get all exams
-     */
     @GetMapping("/exams")
-    public ResponseEntity<?> getAllExams() {
-        try {
-            List<Exam> exams = examService.getAllExams();
-            return ResponseEntity.ok(new ApiResponse(true, "Exams retrieved successfully", exams));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Failed to retrieve exams: " + e.getMessage()));
-        }
+    public ResponseEntity<List<Exam>> getAllExams() {
+        return ResponseEntity.ok(examRepository.findAll());
     }
 
-    /**
-     * Get exam by ID
-     */
-    @GetMapping("/exams/{id}")
-    public ResponseEntity<?> getExamById(@PathVariable Long id) {
-        try {
-            Exam exam = examService.getExamById(id);
-            return ResponseEntity.ok(new ApiResponse(true, "Exam retrieved successfully", exam));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Failed to retrieve exam: " + e.getMessage()));
-        }
+    // --- Question Management ---
+
+    @PostMapping("/questions")
+    public ResponseEntity<?> addQuestion(@Valid @RequestBody QuestionRequest questionRequest) {
+        Exam exam = examRepository.findById(questionRequest.getExamId())
+                .orElseThrow(() -> new RuntimeException("Error: Exam not found."));
+
+        Question question = new Question();
+        question.setContent(questionRequest.getContent());
+        question.setOption1(questionRequest.getOption1());
+        question.setOption2(questionRequest.getOption2());
+        question.setOption3(questionRequest.getOption3());
+        question.setOption4(questionRequest.getOption4());
+        question.setAnswer(questionRequest.getAnswer());
+        question.setExam(exam);
+
+        questionRepository.save(question);
+        return ResponseEntity.ok(new MessageResponse("Question added successfully!"));
     }
 
-    /**
-     * Update exam status (activate/deactivate)
-     */
-    @PutMapping("/exams/{id}/status")
-    public ResponseEntity<?> updateExamStatus(@PathVariable Long id, @RequestBody Map<String, Boolean> request) {
-        try {
-            Boolean isActive = request.get("isActive");
-            Exam exam = examService.updateExamStatus(id, isActive);
-            return ResponseEntity.ok(new ApiResponse(true, "Exam status updated successfully", exam));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Failed to update exam status: " + e.getMessage()));
-        }
+    @GetMapping("/exams/{examId}/questions")
+    public ResponseEntity<List<Question>> getQuestionsByExam(@PathVariable Long examId) {
+        Exam exam = examRepository.findById(examId)
+                .orElseThrow(() -> new RuntimeException("Error: Exam not found."));
+
+        return ResponseEntity.ok(questionRepository.findByExam(exam));
     }
 
-    /**
-     * Delete exam
-     */
-    @DeleteMapping("/exams/{id}")
-    public ResponseEntity<?> deleteExam(@PathVariable Long id) {
-        try {
-            examService.deleteExam(id);
-            return ResponseEntity.ok(new ApiResponse(true, "Exam deleted successfully"));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Failed to delete exam: " + e.getMessage()));
-        }
-    }
+    // --- Student Management ---
 
-    /**
-     * Get admin dashboard statistics
-     */
-    @GetMapping("/dashboard")
-    public ResponseEntity<?> getDashboardStats() {
-        try {
-            Map<String, Object> stats = new HashMap<>();
-            stats.put("totalExams", examService.getTotalExamCount());
-            stats.put("activeExams", examService.getActiveExamCount());
-            stats.put("totalStudents", userRepository.countByRole(User.UserRole.STUDENT));
-            stats.put("totalAttempts", examAttemptRepository.count());
-
-            return ResponseEntity.ok(new ApiResponse(true, "Dashboard stats retrieved successfully", stats));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Failed to retrieve dashboard stats: " + e.getMessage()));
-        }
-    }
-
-    @PostMapping("/exams/{id}/questions/upload")
-    public ResponseEntity<?> uploadQuestions(@PathVariable Long id,
-            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
-        try {
-            if (file.isEmpty()) {
-                return ResponseEntity.badRequest().body(new ApiResponse(false, "Please select a file to upload"));
-            }
-
-            int count = examService.uploadQuestions(id, file);
-            return ResponseEntity.ok(new ApiResponse(true, "Successfully imported " + count + " questions"));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Failed to upload questions: " + e.getMessage()));
-        }
-    }
-
-    /**
-     * Get all students
-     */
     @GetMapping("/students")
-    public ResponseEntity<?> getAllStudents() {
-        try {
-            List<User> students = userRepository.findByRole(User.UserRole.STUDENT);
-            return ResponseEntity.ok(new ApiResponse(true, "Students retrieved successfully", students));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Failed to retrieve students: " + e.getMessage()));
-        }
+    public ResponseEntity<List<User>> getAllStudents() {
+        List<User> students = userRepository.findAll().stream()
+                .filter(user -> user.getRole() == User.Role.STUDENT)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(students);
     }
 
-    /**
-     * Get all attempts for a specific exam
-     */
-    @GetMapping("/exams/{id}/attempts")
-    public ResponseEntity<?> getExamAttempts(@PathVariable Long id) {
-        try {
-            List<com.exam.system.entity.ExamAttempt> attempts = examAttemptRepository.findByExam_ExamId(id);
+    // --- Result Management ---
 
-            // Map to simplified object to avoid recursion/lazy loading issues
-            List<Map<String, Object>> result = new java.util.ArrayList<>();
-            for (com.exam.system.entity.ExamAttempt attempt : attempts) {
-                Map<String, Object> map = new HashMap<>();
-                map.put("attemptId", attempt.getAttemptId());
-                map.put("studentName", attempt.getUser().getFullName());
-                map.put("studentUsername", attempt.getUser().getUsername());
-                map.put("score", attempt.getScore());
-                map.put("status", attempt.getStatus());
-                map.put("startTime", attempt.getStartTime());
-                map.put("endTime", attempt.getEndTime());
-                result.add(map);
+    @Autowired
+    ExamResultRepository examResultRepository;
+
+    @GetMapping("/results")
+    public ResponseEntity<List<ExamResult>> getAllResults() {
+        return ResponseEntity.ok(examResultRepository.findAll());
+    }
+
+    // --- Analytics ---
+
+    @GetMapping("/analytics")
+    public ResponseEntity<com.exam.system.payload.response.AnalyticsResponse> getAnalytics() {
+        List<User> students = userRepository.findAll().stream()
+                .filter(user -> user.getRole() == User.Role.STUDENT)
+                .collect(Collectors.toList());
+        long totalStudents = students.size();
+
+        List<Exam> exams = examRepository.findAll();
+        long totalExams = exams.size();
+
+        List<ExamResult> results = examResultRepository.findAll();
+
+        double totalScorePercent = 0;
+        int passCount = 0;
+        int failCount = 0;
+
+        for (ExamResult result : results) {
+            double percentage = ((double) result.getScore() / result.getTotalQuestions()) * 100;
+            totalScorePercent += percentage;
+
+            if (percentage >= 50) {
+                passCount++;
+            } else {
+                failCount++;
             }
-
-            return ResponseEntity.ok(new ApiResponse(true, "Attempts retrieved successfully", result));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(new ApiResponse(false, "Failed to retrieve attempts: " + e.getMessage()));
         }
+
+        double avgScore = results.isEmpty() ? 0 : totalScorePercent / results.size();
+
+        return ResponseEntity.ok(new com.exam.system.payload.response.AnalyticsResponse(
+                totalStudents, totalExams, avgScore, passCount, failCount));
+    }
+
+    // --- Question Bank ---
+
+    @GetMapping("/question-bank")
+    public ResponseEntity<List<Question>> getQuestionBank() {
+        // Get all questions not assigned to any exam
+        List<Question> bankQuestions = questionRepository.findAll().stream()
+                .filter(q -> q.getExam() == null)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(bankQuestions);
+    }
+
+    @GetMapping("/question-bank/categories")
+    public ResponseEntity<List<String>> getCategories() {
+        List<String> categories = questionRepository.findAll().stream()
+                .map(Question::getCategory)
+                .filter(cat -> cat != null && !cat.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(categories);
+    }
+
+    @PostMapping("/question-bank")
+    public ResponseEntity<?> addToQuestionBank(@RequestBody QuestionRequest questionRequest) {
+        Question question = new Question();
+        question.setContent(questionRequest.getContent());
+        question.setOption1(questionRequest.getOption1());
+        question.setOption2(questionRequest.getOption2());
+        question.setOption3(questionRequest.getOption3());
+        question.setOption4(questionRequest.getOption4());
+        question.setAnswer(questionRequest.getAnswer());
+        question.setCategory(questionRequest.getCategory());
+        question.setExam(null); // Bank question, not assigned to exam
+
+        questionRepository.save(question);
+        return ResponseEntity.ok(new MessageResponse("Question added to bank successfully!"));
+    }
+
+    @PostMapping("/exams/{examId}/add-bank-question/{questionId}")
+    public ResponseEntity<?> addBankQuestionToExam(@PathVariable Long examId, @PathVariable Long questionId) {
+        Exam exam = examRepository.findById(examId)
+                .orElseThrow(() -> new RuntimeException("Error: Exam not found."));
+        Question originalQuestion = questionRepository.findById(questionId)
+                .orElseThrow(() -> new RuntimeException("Error: Question not found."));
+
+        // Create a copy of the question for the exam (keep original in bank)
+        Question questionCopy = new Question();
+        questionCopy.setContent(originalQuestion.getContent());
+        questionCopy.setOption1(originalQuestion.getOption1());
+        questionCopy.setOption2(originalQuestion.getOption2());
+        questionCopy.setOption3(originalQuestion.getOption3());
+        questionCopy.setOption4(originalQuestion.getOption4());
+        questionCopy.setAnswer(originalQuestion.getAnswer());
+        questionCopy.setCategory(originalQuestion.getCategory());
+        questionCopy.setExam(exam); // Assign copy to exam
+
+        questionRepository.save(questionCopy);
+        return ResponseEntity.ok(new MessageResponse("Question added to exam successfully!"));
     }
 }

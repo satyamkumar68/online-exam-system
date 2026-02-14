@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard - Online Examination System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm"
+        style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold" href="#">
+                <i class="bi bi-mortarboard-fill me-2"></i>Student Portal
+            </a>
+            <div class="d-flex align-items-center">
+                <div class="text-white me-3 text-end d-none d-md-block">
+                    <div class="fw-bold" id="studentName">Student</div>
+                    <small class="opacity-75">Welcome back!</small>
+                </div>
+                <button class="btn btn-light btn-sm rounded-pill px-3 text-primary fw-bold"
+                    onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Stats Row (Calculated on Frontend) -->
+        <div class="row mb-5 g-3">
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm stats-card h-100">
+                    <div class="card-body d-flex align-items-center">
+                        <div class="icon-box bg-primary-subtle text-primary rounded-circle p-3 me-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
+                                class="bi bi-journal-text" viewBox="0 0 16 16">
+                                <path
+                                    d="M5 10.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5m0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5" />
+                                <path
+                                    d="M3 0h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-1h1v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v1H1V2a2 2 0 0 1 2-2" />
+                                <path
+                                    d="M1 5v-.5a.5.5 0 0 1 1 0V5h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1zm0 3v-.5a.5.5 0 0 1 1 0V8h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1zm0 3v-.5a.5.5 0 0 1 1 0v.5h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Available Exams</h6>
+                            <h3 class="mb-0 fw-bold" id="activeExamsCount">-</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm stats-card h-100">
+                    <div class="card-body d-flex align-items-center">
+                        <div class="icon-box bg-success-subtle text-success rounded-circle p-3 me-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
+                                class="bi bi-check-circle" viewBox="0 0 16 16">
+                                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16" />
+                                <path
+                                    d="M10.97 4.97a.235.235 0 0 0-.02.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-1.071-1.05" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Completed</h6>
+                            <h3 class="mb-0 fw-bold" id="completedExamsCount">-</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm stats-card h-100">
+                    <div class="card-body d-flex align-items-center">
+                        <div class="icon-box bg-warning-subtle text-warning rounded-circle p-3 me-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
+                                class="bi bi-trophy" viewBox="0 0 16 16">
+                                <path
+                                    d="M2.5.5A.5.5 0 0 1 3 0h10a.5.5 0 0 1 .5.5c0 .538-.012 1.05-.034 1.536a3 3 0 1 1-1.133 5.89c-.79 1.865-1.878 2.777-2.833 3.011v2.173l1.425.356c.194.048.377.135.537.255L13.3 15.1a.5.5 0 0 1-.86.5l-2-5a.5.5 0 0 1 .18-.551l2.378-1.547-.116-.317a1 1 0 0 0-.92-.593H3.042a1 1 0 0 0-.92.593L2.006 8.96l2.378 1.547a.5.5 0 0 1 .18.551l-2 5a.5.5 0 0 1-.86-.5l1.798-1.316a1 1 0 0 0 .537-.255l1.425-.356v-2.173a5.5 5.5 0 0 1-2.99-3.011A3 3 0 0 1 2.5.5m2.854 6.852a4.5 4.5 0 0 0 8.292 0A2 2 0 0 0 12.5 1H3.5a2 2 0 0 0-1.4 3.352" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Your Avg Score</h6>
+                            <h3 class="mb-0 fw-bold" id="studentAvgScore">-%</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Active Exams Column -->
+            <div class="col-lg-8">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="fw-bold text-dark">Active Exams</h4>
+                    <span class="badge bg-primary rounded-pill px-3 py-2" id="examBadge">0 New</span>
+                </div>
+                <div id="examsList" class="row g-3">
+                    <!-- Exams cards loaded here -->
+                    <div class="col-12 text-center py-5">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="text-muted mt-2">Loading exams...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Results Column -->
+            <div class="col-lg-4">
+                <h4 class="fw-bold text-dark mb-3">Recent Results</h4>
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="list-group list-group-flush rounded-3" id="resultsList">
+                            <!-- Results loaded here -->
+                            <div class="p-4 text-center text-muted">Loading results...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Styles -->
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .stats-card {
+            transition: transform 0.2s;
+            border-radius: 12px;
+        }
+
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .icon-box {
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .exam-card {
+            border-radius: 12px;
+            border: none;
+            transition: all 0.2s;
+            overflow: hidden;
+        }
+
+        .exam-card:hover {
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08) !important;
+            transform: translateY(-3px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+    </style>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        checkAuth();
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (!user || !user.roles.includes("STUDENT")) {
+            window.location.href = 'dashboard.html';
+        }
+        document.getElementById('studentName').textContent = user.fullName || user.username;
+
+        function renderExamButton(exam) {
+            const now = new Date();
+            const start = exam.startTime ? new Date(exam.startTime) : null;
+            const end = exam.endTime ? new Date(exam.endTime) : null;
+
+            if (start && now < start) {
+                return `<button class="btn btn-warning w-100 rounded-pill" disabled><i class="bi bi-clock me-2"></i>Upcoming (${start.toLocaleString()})</button>`;
+            }
+            if (end && now > end) {
+                return `<button class="btn btn-secondary w-100 rounded-pill" disabled>Expired</button>`;
+            }
+            return `<a href="take_exam.html?examId=${exam.id}" class="btn btn-primary w-100 rounded-pill shadow-sm">Take Exam <i class="bi bi-arrow-right ms-2"></i></a>`;
+        }
+
+        async function loadData() {
+            let activeCount = 0;
+            let completedCount = 0;
+            let totalScore = 0;
+            let totalResults = 0;
+
+            // Load Exams
+            try {
+                const examResp = await apiFetch('/student/exams');
+                if (examResp.ok) {
+                    const exams = await examResp.json();
+                    const container = document.getElementById('examsList');
+                    container.innerHTML = '';
+
+                    activeCount = exams.length;
+                    document.getElementById('activeExamsCount').textContent = activeCount;
+                    document.getElementById('examBadge').textContent = activeCount + ' Active';
+
+                    if (exams.length === 0) {
+                        container.innerHTML = `<div class="col-12 text-center py-5"><img src="https://cdn-icons-png.flaticon.com/512/7486/7486777.png" width="80" class="mb-3 opacity-50"><p class="text-muted">No active exams at the moment.</p></div>`;
+                    } else {
+                        exams.forEach(exam => {
+                            // Calculate duration display
+                            const div = document.createElement('div');
+                            div.className = 'col-md-6';
+                            div.innerHTML = `
+                               <div class="card h-100 shadow-sm exam-card">
+                                   <div class="card-body p-4">
+                                       <div class="d-flex justify-content-between align-items-start mb-3">
+                                            <div class="bg-light rounded p-2 text-primary fw-bold text-center" style="min-width: 60px;">
+                                                <div class="small text-uppercase">MIN</div>
+                                                <div class="h4 mb-0">${exam.maxTimeMinutes}</div>
+                                            </div>
+                                            <span class="badge bg-success-subtle text-success border border-success px-2 rounded-pill">Active</span>
+                                       </div>
+                                       <h5 class="card-title fw-bold text-dark mb-1">${exam.title}</h5>
+                                       <p class="card-text text-muted small mb-3">${exam.description || 'No description provided.'}</p>
+                                       
+                                       <div class="mt-auto">
+                                            ${renderExamButton(exam)}
+                                       </div>
+                                   </div>
+                               </div>
+                           `;
+                            container.appendChild(div);
+                        });
+                    }
+                }
+            } catch (e) { console.error(e); }
+
+            // Load Results
+            try {
+                const resResp = await apiFetch('/student/results');
+                if (resResp.ok) {
+                    const results = await resResp.json();
+                    const list = document.getElementById('resultsList');
+                    list.innerHTML = '';
+
+                    completedCount = results.length;
+                    document.getElementById('completedExamsCount').textContent = completedCount;
+
+                    if (results.length === 0) {
+                        list.innerHTML = '<div class="p-4 text-center text-muted">No exams taken yet.</div>';
+                    } else {
+                        results.forEach(r => {
+                            // Calculate Stats
+                            const percentage = (r.score / r.totalQuestions) * 100;
+                            totalScore += percentage;
+                            totalResults++;
+
+                            const li = document.createElement('div');
+                            li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3 border-0 border-bottom';
+                            li.innerHTML = `
+                                <div class="d-flex align-items-center flex-grow-1">
+                                    <div class="rounded-circle bg-${percentage >= 50 ? 'success' : 'danger'}-subtle p-2 me-3 text-${percentage >= 50 ? 'success' : 'danger'}">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-${percentage >= 50 ? 'check-lg' : 'x-lg'}" viewBox="0 0 16 16">
+                                            <path d="${percentage >= 50 ? 'M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022' : 'M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z'}"/>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-0 fw-bold text-dark">${r.exam ? r.exam.title : 'Exam'}</h6>
+                                        <small class="text-muted"><i class="bi bi-calendar-event me-1"></i> ${new Date(r.attemptDate).toLocaleDateString()}</small>
+                                    </div>
+                                </div>
+                                <div class="text-end d-flex align-items-center gap-3">
+                                    <div>
+                                        <div class="fw-bold ${percentage >= 50 ? 'text-success' : 'text-danger'}">${percentage.toFixed(0)}%</div>
+                                        <small class="text-muted">${r.score}/${r.totalQuestions}</small>
+                                    </div>
+                                    ${percentage >= 50 ? `<button class="btn btn-sm btn-outline-success rounded-pill px-3" onclick="downloadCertificate('${r.exam ? r.exam.title : 'Exam'}', ${percentage.toFixed(1)}, '${new Date(r.attemptDate).toLocaleDateString()}', ${r.score}, ${r.totalQuestions})">
+                                        <i class="bi bi-download me-1"></i>Certificate
+                                    </button>` : ''}
+                                </div>
+                            `;
+                            list.appendChild(li);
+                        });
+
+                        // Set Average Score
+                        const avg = totalResults > 0 ? (totalScore / totalResults) : 0;
+                        document.getElementById('studentAvgScore').textContent = avg.toFixed(1) + '%';
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function downloadCertificate(examTitle, percentage, date, score, total) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: 'landscape',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            // Background
+            doc.setFillColor(240, 248, 255);
+            doc.rect(0, 0, 297, 210, 'F');
+
+            // Border
+            doc.setDrawColor(102, 126, 234);
+            doc.setLineWidth(2);
+            doc.rect(10, 10, 277, 190);
+
+            doc.setDrawColor(118, 75, 162);
+            doc.setLineWidth(0.5);
+            doc.rect(15, 15, 267, 180);
+
+            // Title
+            doc.setFontSize(40);
+            doc.setTextColor(102, 126, 234);
+            doc.setFont(undefined, 'bold');
+            doc.text('CERTIFICATE OF ACHIEVEMENT', 148.5, 50, { align: 'center' });
+
+            // Subtitle
+            doc.setFontSize(14);
+            doc.setTextColor(100, 100, 100);
+            doc.setFont(undefined, 'normal');
+            doc.text('This is to certify that', 148.5, 70, { align: 'center' });
+
+            // Student Name
+            doc.setFontSize(28);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont(undefined, 'bold');
+            doc.text(user.fullName || user.username, 148.5, 90, { align: 'center' });
+
+            // Achievement text
+            doc.setFontSize(14);
+            doc.setTextColor(100, 100, 100);
+            doc.setFont(undefined, 'normal');
+            doc.text('has successfully completed the examination', 148.5, 105, { align: 'center' });
+
+            // Exam Title
+            doc.setFontSize(20);
+            doc.setTextColor(118, 75, 162);
+            doc.setFont(undefined, 'bold');
+            doc.text(examTitle, 148.5, 120, { align: 'center' });
+
+            // Score
+            doc.setFontSize(16);
+            doc.setTextColor(40, 167, 69);
+            doc.setFont(undefined, 'bold');
+            doc.text(`Score: ${score}/${total} (${percentage}%)`, 148.5, 135, { align: 'center' });
+
+            // Date
+            doc.setFontSize(12);
+            doc.setTextColor(100, 100, 100);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Date: ${date}`, 148.5, 150, { align: 'center' });
+
+            // Footer
+            doc.setFontSize(10);
+            doc.setTextColor(150, 150, 150);
+            doc.text('Online Examination System', 148.5, 180, { align: 'center' });
+
+            // Save
+            doc.save(`Certificate_${examTitle.replace(/\s+/g, '_')}.pdf`);
+        }
+
+        loadData();
+    </script>
+</body>
+
+</html>
